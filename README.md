@@ -4,6 +4,8 @@ Basic Python wrapper for FreeRDP
 Tested under Python 3.4.
 
 ```bash
+sudo apt-get install -y python3.4-dev libfreerdp-client1.1 libfreerdp-gdi1.1
+
 python3 setup.py build_ext --inplace
 ```
 
