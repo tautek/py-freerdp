@@ -1,0 +1,4 @@
+[submodule "sub_modules/FreeRDP"]
+	path = sub_modules/FreeRDP
+	url = https://github.com/FreeRDP/FreeRDP.git
+	branch = stable-1.1
