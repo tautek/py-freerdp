@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <freerdp/freerdp.h>
 #include <freerdp/constants.h>
 #include <freerdp/gdi/gdi.h>
@@ -292,20 +293,74 @@ char* run_command(void* void_instance, char* command) {
     freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_KEY_R);
     sleep(1);
 
-    char * e = NULL;
+    char * raw;
+    char val;
     DWORD code;
-    for (e=command; *e != '\0'; e++) {
-        if (strcmp(e, "a") == 0)      { code = RDP_SCANCODE_KEY_A; }
-        else if (strcmp(e, "c") == 0) { code = RDP_SCANCODE_KEY_C; }
-        else if (strcmp(e, "l") == 0) { code = RDP_SCANCODE_KEY_L; }
+    BOOL isUpper;
+    for (raw=command; *raw != '\0'; raw++) {
+        isUpper = (*raw >= 'A' && *raw <= 'Z');
+        val = isUpper ? tolower(*raw) : *raw;
+        if (val=='a')      { code = RDP_SCANCODE_KEY_A; }
+        else if (val=='b') { code = RDP_SCANCODE_KEY_B; }
+        else if (val=='c') { code = RDP_SCANCODE_KEY_C; }
+        else if (val=='d') { code = RDP_SCANCODE_KEY_D; }
+        else if (val=='e') { code = RDP_SCANCODE_KEY_E; }
+        else if (val=='f') { code = RDP_SCANCODE_KEY_F; }
+        else if (val=='g') { code = RDP_SCANCODE_KEY_G; }
+        else if (val=='h') { code = RDP_SCANCODE_KEY_H; }
+        else if (val=='i') { code = RDP_SCANCODE_KEY_I; }
+        else if (val=='j') { code = RDP_SCANCODE_KEY_J; }
+        else if (val=='k') { code = RDP_SCANCODE_KEY_K; }
+        else if (val=='l') { code = RDP_SCANCODE_KEY_L; }
+        else if (val=='m') { code = RDP_SCANCODE_KEY_M; }
+        else if (val=='n') { code = RDP_SCANCODE_KEY_N; }
+        else if (val=='o') { code = RDP_SCANCODE_KEY_O; }
+        else if (val=='p') { code = RDP_SCANCODE_KEY_P; }
+        else if (val=='q') { code = RDP_SCANCODE_KEY_Q; }
+        else if (val=='r') { code = RDP_SCANCODE_KEY_R; }
+        else if (val=='s') { code = RDP_SCANCODE_KEY_S; }
+        else if (val=='t') { code = RDP_SCANCODE_KEY_T; }
+        else if (val=='u') { code = RDP_SCANCODE_KEY_U; }
+        else if (val=='v') { code = RDP_SCANCODE_KEY_V; }
+        else if (val=='w') { code = RDP_SCANCODE_KEY_W; }
+        else if (val=='x') { code = RDP_SCANCODE_KEY_X; }
+        else if (val=='y') { code = RDP_SCANCODE_KEY_Y; }
+        else if (val=='z') { code = RDP_SCANCODE_KEY_Z; }
+        else if (val=='1') { code = RDP_SCANCODE_KEY_1; }
+        else if (val=='2') { code = RDP_SCANCODE_KEY_2; }
+        else if (val=='3') { code = RDP_SCANCODE_KEY_3; }
+        else if (val=='4') { code = RDP_SCANCODE_KEY_4; }
+        else if (val=='5') { code = RDP_SCANCODE_KEY_5; }
+        else if (val=='6') { code = RDP_SCANCODE_KEY_6; }
+        else if (val=='7') { code = RDP_SCANCODE_KEY_7; }
+        else if (val=='8') { code = RDP_SCANCODE_KEY_8; }
+        else if (val=='9') { code = RDP_SCANCODE_KEY_9; }
+        else if (val=='0') { code = RDP_SCANCODE_KEY_0; }
+        else if (val=='-') { code = RDP_SCANCODE_OEM_MINUS; }
+        else if (val=='+') { code = RDP_SCANCODE_OEM_PLUS; }
+        else if (val=='[') { code = RDP_SCANCODE_OEM_4; }
+        else if (val==']') { code = RDP_SCANCODE_OEM_6; }
+        else if (val==';') { code = RDP_SCANCODE_OEM_1; }
+        else if (val==''') { code = RDP_SCANCODE_OEM_7; }
+        else if (val=='/') { code = RDP_SCANCODE_OEM_2; }
+        else if (val=='\\'){ code = RDP_SCANCODE_OEM_102; }
+        else if (val=='*'){ code = RDP_SCANCODE_MULTIPLY; }
+        else if (val==' '){ code = RDP_SCANCODE_SPACE; }
+        else if (val=='.') { code = RDP_SCANCODE_OEM_PERIOD; }
+        else if (val==',') { code = RDP_SCANCODE_OEM_COMMA; }
         else { return "Bad code"; }
-        freerdp_input_send_keyboard_event_ex(instance->input, TRUE, code);
-        usleep(100);
-        freerdp_input_send_keyboard_event_ex(instance->input, FALSE, code);
-        usleep(100);
+        if (isUpper) {
+            freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_LSHIFT);
+            usleep(100);
+        }
+        freerdp_input_send_keyboard_event_ex(instance->input, TRUE, code); usleep(100);
+        freerdp_input_send_keyboard_event_ex(instance->input, FALSE, code); usleep(100);
+        if (isUpper) {
+            freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_LSHIFT);
+            usleep(100);
+        }
     }
-
-    freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_RETURN);
+    freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_RETURN); usleep(100);
     freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_RETURN);
     return "";
 }
