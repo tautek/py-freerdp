@@ -2,29 +2,43 @@
 #include <structmember.h>
 #include <signal.h>
 #include "freerdp.h"
+#include "freerdp_const_py.h"
+
+#define FR_LOG(MSG) fprintf(stderr, "%s\n", MSG); 
+#define FR_DEBUG(MSG) fprintf(stderr, "%s\n", MSG);
+#define GETSTATE(m) ((struct module_state*)PyModule_GetState(m))
+
+/**
+ * Global pointer to module.
+ */
+PyObject* __global_module = NULL;
 
 /**
  * Module level mapping tracking C pointers
  * for callbacks.
  */
-static PyObject* __module_instanceMap = NULL;
+struct module_state {
+    PyObject* _module_instanceMap;
+};
 
 /**
  * Defines the FreeRDP class data.
  */
 typedef struct {
     PyObject_HEAD
-    PyObject* instance;
-    PyObject* onConnect;
+    PyObject* _instance;
+    PyObject* _onConnect;
 } FreeRDP;
 
 /**
  * Cyclic garbace collection.
  */
 static int FreeRDP_trav(FreeRDP* self, visitproc visit, void* arg) {
-    Py_VISIT(self->instance);
-    Py_VISIT(self->onConnect);
-    Py_XDECREF(self);
+    FR_DEBUG("FreeRDP_trav+")
+    Py_VISIT(self->_instance);
+    Py_VISIT(self->_onConnect);
+    //Py_XDECREF(self);
+    FR_DEBUG("-FreeRDP_trav")
     return 0;
 }
 
@@ -32,8 +46,10 @@ static int FreeRDP_trav(FreeRDP* self, visitproc visit, void* arg) {
  * Clear FreeRDP class instance.
  */
 static int FreeRDP_clear(FreeRDP* self) {
-    Py_CLEAR(self->instance);
-    Py_CLEAR(self->onConnect);
+    FR_DEBUG("FreeRDP_clear+")
+    Py_CLEAR(self->_instance);
+    Py_CLEAR(self->_onConnect);
+    FR_DEBUG("-FreeRDP_clear")
     return 0;
 }
 
@@ -41,9 +57,11 @@ static int FreeRDP_clear(FreeRDP* self) {
  * Cleanup FreeRDP class instance.
  */
 static void FreeRDP_dealloc(FreeRDP* self) {
-    stop(PyCapsule_GetPointer(self->instance, NULL));
+    FR_DEBUG("FreeRDP_dealloc+")
+    stop(PyCapsule_GetPointer(self->_instance, NULL));
     FreeRDP_clear(self);
     Py_TYPE(self)->tp_free(self);
+    FR_DEBUG("-FreeRDP_dealloc")
 }
 
 /**
@@ -52,7 +70,8 @@ static void FreeRDP_dealloc(FreeRDP* self) {
  * initiated it.
  */
 static void onConnect_callback(void* instance) {
-    PyObject* self = PyDict_GetItem(__module_instanceMap, PyUnicode_FromFormat("%d", instance));
+    FR_DEBUG("onConnect_callback+")
+    PyObject* self = PyDict_GetItem(GETSTATE(__global_module)->_module_instanceMap, PyUnicode_FromFormat("%d", instance));
     if (self==NULL) { fprintf(stderr,"SELF NULL!!!!");}
     PyObject* args = PyTuple_New(1);
     if (PyTuple_SetItem(args, 0, self) != 0) {
@@ -61,16 +80,19 @@ static void onConnect_callback(void* instance) {
     FreeRDP* realSelf = (FreeRDP*)self;
     PyGILState_STATE state;
     state = PyGILState_Ensure();
-    PyEval_CallObject(realSelf->onConnect, args);
+    PyEval_CallObject(realSelf->_onConnect, args);
     Py_XDECREF(args);
     PyGILState_Release(state);
+    FR_DEBUG("-onConnect_callback")
 }
 
 /**
  * Create FreeRDP class type.
  */
 static PyObject* FreeRDP_new(PyTypeObject* type, PyObject* args, PyObject* kwargs) {
+    FR_DEBUG("FreeRDP_new+")
     FreeRDP* self = (FreeRDP*)type->tp_alloc(type, 0);
+    FR_DEBUG("-FreeRDP_new")
     return (PyObject*)self;
 }
 
@@ -78,18 +100,18 @@ static PyObject* FreeRDP_new(PyTypeObject* type, PyObject* args, PyObject* kwarg
  * Init FreeRDP class.
  */
 static int FreeRDP_init(FreeRDP* self, PyObject* args, PyObject* kwargs) {
+    FR_DEBUG("FreeRDP_init+")
     char* args_string;
     PyObject* onConnect;
     if (!PyArg_ParseTuple(args, "sO:set_callback", &args_string, &onConnect))
         return -1;
-
     if (!PyCallable_Check(onConnect)) {
         PyErr_SetString(PyExc_TypeError, "onConnect must be callable");
         return -1;
     }
     Py_XINCREF(onConnect);
-    Py_XDECREF(self->onConnect);
-    self->onConnect = onConnect;
+    Py_XDECREF(self->_onConnect);
+    self->_onConnect = onConnect;
 
     char *argv[100];
     int argc = 1;
@@ -101,26 +123,44 @@ static int FreeRDP_init(FreeRDP* self, PyObject* args, PyObject* kwargs) {
     }
 
     void* instance = start(argc, argv, onConnect_callback);
-       if (PyDict_SetItem(__module_instanceMap, PyUnicode_FromFormat("%d", instance), (PyObject*)self) != 0) {
+    if (PyDict_SetItem(GETSTATE(__global_module)->_module_instanceMap, PyUnicode_FromFormat("%d", instance), (PyObject*)self) != 0) {
         return -1;
     }
-    PyObject* temp = self->instance;
-    self->instance = PyCapsule_New(instance, NULL, NULL);
+    PyObject* temp = self->_instance;
+    self->_instance = PyCapsule_New(instance, NULL, NULL);
     Py_XDECREF(temp);
+    FR_DEBUG("FreeRDP_init-")
     return 0;
 }    
 
 /**
  * Run a command in remote session.
  */
-static void FreeRDP_run_command(FreeRDP* self, PyObject* command) {
+static PyObject* FreeRDP_run_command(FreeRDP* self, PyObject* command) {
+    FR_DEBUG("FreeRDP_run_command+")
     char* command_string;
     if (!PyArg_ParseTuple(command, "s", &command_string))
         PyErr_SetString(PyExc_RuntimeError, "expect command");
-    char* status = run_command(PyCapsule_GetPointer(self->instance, NULL), command_string);
-    if (strlen(status) > 0) {
-        PyErr_SetString(PyExc_RuntimeError, status);
+    run_command(PyCapsule_GetPointer(self->_instance, NULL), command_string);
+    FR_DEBUG("-FreeRDP_run_command")
+    Py_RETURN_NONE;
+}
+
+static PyObject* FreeRDP_press_keys(FreeRDP* self, PyObject* args) {
+    FR_DEBUG("FreeRDP_press_keys+")
+    PyObject* list;
+    if (!PyArg_ParseTuple(args, "O", &list))
+        PyErr_SetString(PyExc_RuntimeError, "expect keys");
+    int count = PySequence_Fast_GET_SIZE(list);
+    DWORD keys[count];
+    int index;
+    for (index=0; index < count; ++index) {
+        keys[index] = PyLong_AsUnsignedLong(PySequence_Fast_GET_ITEM(list, index));
     }
+    press_keys(PyCapsule_GetPointer(self->_instance, NULL), count, keys);
+    Py_XDECREF(list);
+    FR_DEBUG("-FreeRDP_press_keys")
+    Py_RETURN_NONE;
 }
 
 /**
@@ -134,8 +174,6 @@ static PyObject* FreeRDP_repr(FreeRDP* self) {
  * Class members.
  */
 static PyMemberDef FreeRDP_members[] = {
-    {"instance", T_OBJECT_EX, offsetof(FreeRDP, instance), 0, "API instance"},
-    {"onConnect", T_OBJECT_EX, offsetof(FreeRDP, onConnect), 0, "OnConnect callback"},
     {NULL}
 };
 
@@ -144,7 +182,8 @@ static PyMemberDef FreeRDP_members[] = {
  */
 static PyMethodDef FreeRDP_methods[] = {
     {"run_command", (PyCFunction)FreeRDP_run_command, METH_VARARGS, "Run command"},
-    {NULL}
+    {"press_keys", (PyCFunction)FreeRDP_press_keys, METH_VARARGS, "Press keys"},
+    {NULL, NULL}
 };
 
 /**
@@ -197,16 +236,22 @@ static PyTypeObject FreeRDPType = {
  * Cleanup module.
  */
 static void module_freerdp_free(void* module) {
-    destroy(10000);
+    FR_DEBUG("module_freerdp_free+")
+    //destroy(10000);
+    FR_DEBUG("-module_freerdp_free")
 }
 
 static int module_freerdp_trav(PyObject* module, visitproc visit, void* arg) {
-    destroy(10000);
-    Py_XDECREF(module);
+    FR_DEBUG("module_freerdp_trav+")
+    //destroy(10000);
+    //Py_XDECREF(module);
+    FR_DEBUG("-module_freerdp_trav")
     return 0;
 }
 
 static int module_freerdp_clear(void* module) {
+    FR_DEBUG("module_freerdp_clear+")
+    FR_DEBUG("-module_freerdp_clear")
     return 0;
 }
 
@@ -217,7 +262,7 @@ static PyModuleDef freerdpmodule = {
     PyModuleDef_HEAD_INIT,    
     "freerdp",                         /* m_name     */
     "FreeRDP client",                  /* m_doc      */
-    -1,                                /* m_size     */
+    sizeof(struct module_state),       /* m_size     */
     NULL,                              /* m_methods  */ 
     NULL,                              /* m_reload   */
     (traverseproc)module_freerdp_trav, /* m_traverse */
@@ -231,23 +276,24 @@ static PyModuleDef freerdpmodule = {
 PyMODINIT_FUNC
 PyInit_freerdp(void) {
     PyEval_InitThreads();
-
-    Py_XDECREF(__module_instanceMap); 
-    __module_instanceMap = PyDict_New();
-    assert(PyDict_Check(__module_instanceMap));
-    if (__module_instanceMap == NULL) {
-        return NULL;
-    } 
-    Py_XINCREF(__module_instanceMap);
-
-    PyObject* m;
+    PyEval_InitThreads();
+    PyEval_InitThreads();
+    PyObject* module;
     if (PyType_Ready(&FreeRDPType) < 0)
         return NULL;
-    m = PyModule_Create(&freerdpmodule);
-    if (m == NULL)
+    module = PyModule_Create(&freerdpmodule);
+    if (module == NULL)
         return NULL;
+    struct module_state *state = GETSTATE(module);
+    state->_module_instanceMap = PyDict_New();
+    if (state->_module_instanceMap == NULL) {
+        Py_XDECREF(module);
+        return NULL;
+    }
     Py_XINCREF(&FreeRDPType);
-    PyModule_AddObject(m, "FreeRDP", (PyObject*)&FreeRDPType);
-    return m;
+    PyModule_AddObject(module, "FreeRDP", (PyObject*)&FreeRDPType);
+    FreeRDP_AddConstants(module);
+    __global_module = module;
+    return module;
 }
 

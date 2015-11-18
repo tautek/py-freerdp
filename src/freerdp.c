@@ -283,21 +283,36 @@ void stop(void* instance) {
 }
 
 /**
+ * Wrap key presses.
+ */
+void press_keys(void* void_instance, int count, DWORD* codes) {
+    freerdp* instance = (freerdp*)void_instance;
+    int index;
+    for (index=0; index<count; ++index) {
+        freerdp_input_send_keyboard_event_ex(instance->input, TRUE, codes[index]); usleep(100);
+    }
+    for (index=count-1; index>=0; --index) {
+        freerdp_input_send_keyboard_event_ex(instance->input, FALSE, codes[index]); usleep(100);
+    }
+}
+
+/**
  * Run a command string.
  */
-char* run_command(void* void_instance, char* command) {
+void run_command(void* void_instance, char* command) {
     freerdp* instance = (freerdp*)void_instance;
-    freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_LWIN);
-    freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_KEY_R);
-    freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_LWIN);
-    freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_KEY_R);
-    sleep(1);
+    freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_LWIN); usleep(100);
+    freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_KEY_R); usleep(100);
+    freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_LWIN); usleep(100);
+    freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_KEY_R); usleep(100);
 
     char * raw;
     char val;
     DWORD code;
     BOOL isUpper;
-    for (raw=command; *raw != '\0'; raw++) {
+    for (raw=command; *raw != '\0'; ++raw) {
+        code = 0;
+        usleep(100000);
         isUpper = (*raw >= 'A' && *raw <= 'Z');
         val = isUpper ? tolower(*raw) : *raw;
         if (val=='a')      { code = RDP_SCANCODE_KEY_A; }
@@ -341,28 +356,39 @@ char* run_command(void* void_instance, char* command) {
         else if (val=='[') { code = RDP_SCANCODE_OEM_4; }
         else if (val==']') { code = RDP_SCANCODE_OEM_6; }
         else if (val==';') { code = RDP_SCANCODE_OEM_1; }
-        else if (val==''') { code = RDP_SCANCODE_OEM_7; }
+        else if (val=='\'') { code = RDP_SCANCODE_OEM_7; }
         else if (val=='/') { code = RDP_SCANCODE_OEM_2; }
         else if (val=='\\'){ code = RDP_SCANCODE_OEM_102; }
         else if (val=='*'){ code = RDP_SCANCODE_MULTIPLY; }
         else if (val==' '){ code = RDP_SCANCODE_SPACE; }
         else if (val=='.') { code = RDP_SCANCODE_OEM_PERIOD; }
         else if (val==',') { code = RDP_SCANCODE_OEM_COMMA; }
-        else { return "Bad code"; }
-        if (isUpper) {
-            freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_LSHIFT);
-            usleep(100);
-        }
-        freerdp_input_send_keyboard_event_ex(instance->input, TRUE, code); usleep(100);
-        freerdp_input_send_keyboard_event_ex(instance->input, FALSE, code); usleep(100);
-        if (isUpper) {
-            freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_LSHIFT);
-            usleep(100);
+        if (code != 0) {
+            if (isUpper) {
+                freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_LSHIFT);
+                usleep(100);
+            }
+            freerdp_input_send_keyboard_event_ex(instance->input, TRUE, code); usleep(100);
+            freerdp_input_send_keyboard_event_ex(instance->input, FALSE, code); usleep(100);
+            if (isUpper) {
+                freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_LSHIFT);
+                usleep(100);
+            }
+        } else {
+            if (val=='$') {
+                DWORD dollarKeys[2] = {RDP_SCANCODE_LSHIFT, RDP_SCANCODE_KEY_4};
+                press_keys(instance, 2, dollarKeys);
+            } else if (val=='_') {
+                DWORD underscoreKeys[2] = {RDP_SCANCODE_LSHIFT, RDP_SCANCODE_OEM_MINUS};
+                press_keys(instance, 2, underscoreKeys);
+            } else {
+                fprintf(stderr, "Unknown val %c", val);
+                return;
+            }
         }
     }
     freerdp_input_send_keyboard_event_ex(instance->input, TRUE, RDP_SCANCODE_RETURN); usleep(100);
     freerdp_input_send_keyboard_event_ex(instance->input, FALSE, RDP_SCANCODE_RETURN);
-    return "";
 }
 
 /**
